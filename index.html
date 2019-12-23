@@ -50,7 +50,19 @@
         position: relative;
         width: 100px;
         height: 100%;
-        margin: 20px
+        margin: 20px;
+
+        transition: 0.5s cubic-bezier(.46,.03,.52,.96);
+      }
+
+      .entry:hover
+      {
+        transform: scale(1.1);
+      }
+
+      .entry:active
+      {
+        transform: scale(0.9);
       }
 
       svg
