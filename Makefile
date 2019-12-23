@@ -13,5 +13,6 @@ main.bc: main.cpp
 landing-page: main.bc index.html
 	mkdir -p $(FINAL)
 	$(COMPILER) -O2 $(BUILD)/main.bc -o $(FINAL)/index.html -s WASM=1 -s USE_SDL=2 --shell-file index.html
+	cp -rf fonts final/
 
     
