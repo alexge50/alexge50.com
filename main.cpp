@@ -4,6 +4,7 @@
 #include <random>
 #include <array>
 #include <iterator>
+#include <chrono>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -88,6 +89,18 @@ template<int ROWS, int COLUMNS, int MAX_BARS, int MAX_INVERSE_SPEED>
 class Simulation
 {
 public:
+    Simulation()
+    {
+        std::mt19937_64 engine{
+            static_cast<unsigned long>(std::chrono::system_clock::now().time_since_epoch().count())
+        };
+
+        position_random_engine.seed(engine());
+        color_random_engine.seed(engine());
+        lifetime_random_engine.seed(engine());
+        inv_random_engine.seed(engine());
+    }
+
     void tick()
     {
         int i = 0;
@@ -137,10 +150,10 @@ public:
 
 private:
     Color screen[ROWS][COLUMNS]{};
-    std::mt19937 position_random_engine{10};
-    std::mt19937 color_random_engine{100};
-    std::mt19937 lifetime_random_engine{200};
-    std::mt19937 inv_random_engine{400};
+    std::mt19937 position_random_engine;
+    std::mt19937 color_random_engine;
+    std::mt19937 lifetime_random_engine;
+    std::mt19937 inv_random_engine;
 
     auto random_position()
     {
