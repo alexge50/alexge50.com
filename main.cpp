@@ -24,7 +24,7 @@ private:
 
         if((
                window_ = SDL_CreateWindow(
-                   "background",
+                   "alexge50.com",
                    SDL_WINDOWPOS_UNDEFINED,
                    SDL_WINDOWPOS_UNDEFINED,
                    512,
