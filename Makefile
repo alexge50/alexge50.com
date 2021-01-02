@@ -1,4 +1,4 @@
-COMPILER=$(EMSCRIPTEN_PATH)/emcc
+COMPILER=emcc
 BUILD=./build
 FINAL=./final
 

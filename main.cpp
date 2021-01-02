@@ -5,6 +5,7 @@
 #include <array>
 #include <iterator>
 #include <chrono>
+#include <optional>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -85,62 +86,99 @@ Color mix(Color c1, Color c2)
     };
 }
 
+class Direction
+{
+public:
+    enum Directions
+    {
+        NORTH = 0,
+        EAST,
+        SOUTH,
+        WEST
+    };
+
+    Direction(Directions d = NORTH): direction{d} {}
+
+    Direction& operator++(int)
+    {
+        int x = direction + 1;
+        if(x > WEST)
+            x = NORTH;
+        direction = static_cast<Directions>(x);
+    }
+
+    Direction& operator--(int)
+    {
+        int x = direction - 1;
+        if(x < NORTH)
+            x = WEST;
+        direction = static_cast<Directions>(x);
+    }
+
+    Directions get() { return direction; }
+
+    int get_direction_vector_row()
+    {
+        int dir[] = {-1, 0, 1, 0};
+        return dir[direction];
+    }
+
+    int get_direction_vector_column()
+    {
+        int dir[] = {0, 1, 0, -1};
+        return dir[direction];
+    }
+
+private:
+    Directions direction;
+};
+
 template<int ROWS, int COLUMNS, int MAX_BARS, int MAX_INVERSE_SPEED>
 class Simulation
 {
 public:
     Simulation()
     {
-        std::mt19937_64 engine{
-            static_cast<unsigned long>(std::chrono::system_clock::now().time_since_epoch().count())
-        };
+        std::mt19937_64 engine{static_cast<unsigned long>(std::chrono::system_clock::now().time_since_epoch().count())};
 
-        position_random_engine.seed(engine());
-        color_random_engine.seed(engine());
-        lifetime_random_engine.seed(engine());
-        inv_random_engine.seed(engine());
+        for(auto& ant: ants)
+            ant = {
+                std::uniform_int_distribution{0, ROWS}(engine),
+                std::uniform_int_distribution{0, COLUMNS}(engine),
+                colors[std::uniform_int_distribution{0, sizeof(colors)}(engine)],
+                static_cast<Direction::Directions>(std::uniform_int_distribution{0, 4}(engine))
+        };
     }
 
     void tick()
     {
-        int i = 0;
-        for(auto& bar: bars)
+        for(auto& ant: ants)
         {
-            if(bar.alive)
+            if(ant.row >= ROWS)
+                ant.row = 0;
+            else if(ant.row < 0)
+                ant.row = ROWS - 1;
+
+            if(ant.column >= COLUMNS)
+                ant.column = 0;
+            else if(ant.column < 0)
+                ant.column = COLUMNS - 1;
+
+            if(colony[ant.row][ant.column])
             {
-                if(bar.ticks_to_wait <= 0)
-                {
-                    if(bar.current_row != -1)
-                    {
-                        int a = 400 - 255 * bar.current_row / bar.lifetime;
-                        screen[bar.current_row][bar.column] =
-                            mix({
-                                    bar.color.r,
-                                    bar.color.g,
-                                    bar.color.b,
-                                    static_cast<uint8_t>(a < 255 ? a : 255)
-                                },
-                                screen[bar.current_row][bar.column]
-                            );
-                    }
-                    bar.current_row++;
-                    if(bar.current_row < bar.lifetime)
-                        bar.ticks_to_wait = bar.inverse_speed;
-                    else bar.alive = false;
-                }
-                else bar.ticks_to_wait--;
+                colony[ant.row][ant.column] = std::nullopt;
+                screen[ant.row][ant.column] = Color{0, 0, 0, 255};
+                ant.direction--;
+                ant.row += ant.direction.get_direction_vector_row();
+                ant.column += ant.direction.get_direction_vector_column();
             }
             else
             {
-                bar = Bar{
-                    true,
-                    colors[random_color()],
-                    random_lifetime(),
-                    random_inv_speed(),
-                    random_position(),
-                    -1,
-                    0
-                };
+                colony[ant.row][ant.column] = ant.color;
+                screen[ant.row][ant.column] = ant.color;
+                ant.direction++;
+                ant.row += ant.direction.get_direction_vector_row();
+                ant.column += ant.direction.get_direction_vector_column();
             }
         }
     }
@@ -150,40 +188,13 @@ public:
 
 private:
     Color screen[ROWS][COLUMNS]{};
-    std::mt19937 position_random_engine;
-    std::mt19937 color_random_engine;
-    std::mt19937 lifetime_random_engine;
-    std::mt19937 inv_random_engine;
-
-    auto random_position()
-    {
-        return std::uniform_int_distribution<int>{0, COLUMNS - 1}(position_random_engine);
-    }
-
-    auto random_color()
-    {
-        return std::uniform_int_distribution<int>{0, static_cast<int>(std::size(colors)) - 1}(color_random_engine);
-    }
-
-    auto random_lifetime()
-    {
-        return std::uniform_int_distribution<int>{ROWS / 4, ROWS - 1}(lifetime_random_engine);
-    }
-
-    auto random_inv_speed()
-    {
-        return std::uniform_int_distribution<int>{1, MAX_INVERSE_SPEED}(inv_random_engine);
-    }
-
-/*
-    const Color colors[6] = {
-        Color{0xE3, 0x17, 0x0A, 0xFF},
-        Color{0xEC, 0xA4, 0x00, 0xFF},
-        Color{0x00, 0x78, 0xFF, 0xFF},
-        Color{0xF9, 0xDC, 0x5C, 0xFF},
-        Color{0x3C, 0x17, 0x42, 0xFF},
-        Color{0xE3, 0x17, 0x0A, 0xFF},
-    };*/
+    std::optional<Color> colony[ROWS][COLUMNS];
+    struct {
+        int row;
+        int column;
+        Color color;
+        Direction direction;
+    } ants [2000];
 
     const Color colors[5] = {
         Color{0x37, 0x12, 0x3C, 0xFF},
@@ -193,26 +204,13 @@ private:
         Color{0x94, 0x5D, 0x5E, 0xFF},
     };
 
-    struct Bar
-    {
-        bool alive = false;
-        Color color;
-        int lifetime;
-        int inverse_speed;
-        int column;
-
-        int current_row;
-        int ticks_to_wait;
-    };
-
-    Bar bars[MAX_BARS]{};
 };
 
 int main()
 {
     auto main_loop = [](){
-        constexpr int ROWS = 200;
-        constexpr int COLUMNS = 200;
+        constexpr int ROWS = 256;
+        constexpr int COLUMNS = 256;
         static Simulation<ROWS, COLUMNS, 25, 4> simulation;
         static SDL_Surface* surface = SDL_CreateRGBSurface(
                 0,
