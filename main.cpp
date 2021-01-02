@@ -162,7 +162,7 @@ private:
 
     auto random_color()
     {
-        return std::uniform_int_distribution<int>{0, static_cast<int>(std::size(colors)) - 1}(color_random_engine);
+        return std::uniform_int_distribution<int>{0, static_cast<int>(colors.size()) - 1}(color_random_engine);
     }
 
     auto random_lifetime()
@@ -185,7 +185,7 @@ private:
         Color{0xE3, 0x17, 0x0A, 0xFF},
     };*/
 
-    const Color colors[5] = {
+    const std::array<Color, 5> colors {
         Color{0x37, 0x12, 0x3C, 0xFF},
         Color{0x71, 0x67, 0x7C, 0xFF},
         Color{0xA9, 0x9F, 0x96, 0xFF},
