@@ -14,7 +14,7 @@
 #include <emscripten.h>
 #endif
 
-const int SCALE_FACTOR = 4;
+const int SCALE_FACTOR = 8;
 
 struct Image {
     struct Pixel {
@@ -33,6 +33,14 @@ struct Image {
     const Pixel& operator()(int x, int y) const {
         x = (x + width) % width;
         y = (y + height) % height;
+        return data[y * width + x];
+    }
+
+    Pixel& raw_subscript(int x, int y) {
+        return data[y * width + x];
+    }
+
+    const Pixel& raw_subscript(int x, int y) const {
         return data[y * width + x];
     }
 
@@ -76,8 +84,8 @@ void pattern_data_iteration(Image& image, PatternData& pattern_data) {
         }
 
         c.last_position = c.position;
-        c.position.x = 980 * c.position.x / 1000 + 20 * c.desired_position.x / 1000;
-        c.position.y = 980 * c.position.y / 1000 + 20 * c.desired_position.y / 1000;
+        c.position.x = 950 * c.position.x / 1000 + 50 * c.desired_position.x / 1000;
+        c.position.y = 950 * c.position.y / 1000 + 50 * c.desired_position.y / 1000;
 
         for(int y = c.position.y - pattern_data.circle_radius; y <= c.position.y + pattern_data.circle_radius; y++) {
             for(int x = c.position.x - pattern_data.circle_radius; x <= c.position.x + pattern_data.circle_radius; x++) {
@@ -93,31 +101,69 @@ void pattern_data_iteration(Image& image, PatternData& pattern_data) {
 }
 
 void game_of_life_iteration(Image& out, const Image& in) {
-    for(int y = 0; y < in.height; y++) {
-        for(int x = 0; x < in.width; x++) {
-            int neighbours = -(in(x, y).a == 255);
+    auto wrap_around_iteration = [&](int x, int y) {
+        int neighbours = -(in.raw_subscript(x, y).a == 255);
+
+        for(int dx = -1; dx <= 1; dx++) {
+            for(int dy = -1; dy <= 1; dy++) {
+                neighbours += (in(x + dx, y + dy).a == 255);
+            }
+        }
+
+        bool alive = neighbours == 3 || (neighbours == 2 && (in.raw_subscript(x, y).a == 255));
+
+        if(alive) {
+            out.raw_subscript(x, y) = Image::Pixel{255, 255, 255, 255};
+        } else {
+            int decay_rate = std::max(int(in.raw_subscript(x, y).a) / 20, 1);
+            out.raw_subscript(x, y).a = std::max(int(in.raw_subscript(x, y).a) - decay_rate, 0);
+        }
+
+        if(out.raw_subscript(x, y).a == 255) {
+            out.raw_subscript(x, y) = Image::Pixel{255, 255, 255, 255};
+        } else if(out.raw_subscript(x, y).a == 0) {
+            out.raw_subscript(x, y) = Image::Pixel{0, 0, 0, 0};
+        } else {
+            out.raw_subscript(x, y) = Image::Pixel{152, 3, 252, out.raw_subscript(x, y).a};
+        }
+    };
+
+
+    for(int y = 1; y < in.height - 1; y++) {
+        wrap_around_iteration(0, y);
+        wrap_around_iteration(in.width - 1, y);
+    }
+
+    for(int x = 0; x < in.width; x++) {
+        wrap_around_iteration(x, 0);
+        wrap_around_iteration(x, in.height - 1);
+    }
+
+    for(int y = 1; y < in.height - 1; y++) {
+        for(int x = 1; x < in.width - 1; x++) {
+            int neighbours = -(in.raw_subscript(x, y).a == 255);
 
             for(int dx = -1; dx <= 1; dx++) {
                 for(int dy = -1; dy <= 1; dy++) {
-                    neighbours += (in(x + dx, y + dy).a == 255);
+                    neighbours += (in.raw_subscript(x + dx, y + dy).a == 255);
                 }
             }
 
-            bool alive = neighbours == 3 || (neighbours == 2 && (in(x, y).a == 255));
+            bool alive = neighbours == 3 || (neighbours == 2 && (in.raw_subscript(x, y).a == 255));
 
             if(alive) {
-                out(x, y) = Image::Pixel{255, 255, 255, 255};
+                out.raw_subscript(x, y) = Image::Pixel{255, 255, 255, 255};
             } else {
-                int decay_rate = std::max(int(in(x, y).a) / 20, 1);
-                out(x, y).a = std::max(int(in(x, y).a) - decay_rate, 0);
+                int decay_rate = std::max(int(in.raw_subscript(x, y).a) / 20, 1);
+                out.raw_subscript(x, y).a = std::max(int(in.raw_subscript(x, y).a) - decay_rate, 0);
             }
 
-            if(out(x, y).a == 255) {
-                out(x, y) = Image::Pixel{255, 255, 255, 255};
-            } else if(out(x, y).a == 0) {
-                out(x, y) = Image::Pixel{0, 0, 0, 0};
+            if(out.raw_subscript(x, y).a == 255) {
+                out.raw_subscript(x, y) = Image::Pixel{255, 255, 255, 255};
+            } else if(out.raw_subscript(x, y).a == 0) {
+                out.raw_subscript(x, y) = Image::Pixel{0, 0, 0, 0};
             } else {
-                out(x, y) = Image::Pixel{152, 3, 252, out(x, y).a};
+                out.raw_subscript(x, y) = Image::Pixel{152, 3, 252, out.raw_subscript(x, y).a};
             }
         }
     }
@@ -164,9 +210,9 @@ void filter_eq(Image& image) {
     for(int i = 0; i < image.data.size(); i++) {
         float r = 0.f, g = 0.f, b = 0.f;
 
-        red_img[i] = mulaw_decode(image.data[i].r);
-        green_img[i] = mulaw_decode(image.data[i].g);
-        blue_img[i] = mulaw_decode(image.data[i].b);
+        red_img[i] = miulaw_decode(image.data[i].r);
+        green_img[i] = miulaw_decode(image.data[i].g);
+        blue_img[i] = miulaw_decode(image.data[i].b);
 
         for(int j = i, k = 0; k < filter_coeff_size && j >= 0; j--, k++) {
             r += filter_coeff[k] * red_img[j];
@@ -174,9 +220,21 @@ void filter_eq(Image& image) {
             b += filter_coeff[k] * blue_img[j];
         }
 
-        image.data[i].r = mulaw_encode(r);
-        image.data[i].g = mulaw_encode(g);
-        image.data[i].b = mulaw_encode(b);
+        if(i - filter_coeff_size > 0) {
+            image.data[i - filter_coeff_size].r = miulaw_encode(r);
+            image.data[i - filter_coeff_size].g = miulaw_encode(g);
+            image.data[i - filter_coeff_size].b = miulaw_encode(b);
+        }
+    }
+}
+
+void overlay(Image& image, const Image& game_of_life) {
+    for(int y = 0; y < image.height; y++) {
+        for(int x = 0; x < image.width; x++) {
+            if(game_of_life.raw_subscript(x, y).a == 255) {
+                image.raw_subscript(x, y) = Image::Pixel{255, 255, 255, 255};
+            }
+        }
     }
 }
 
@@ -193,7 +251,9 @@ int main()
         static Image game_of_life_board;
         static Image final;
         static PatternData pattern_data {
-            .random_engine = std::mt19937{}
+            .random_engine = std::mt19937{
+                static_cast<unsigned long>(std::chrono::system_clock::now().time_since_epoch().count())
+            }
         };
 
         SDL_Event e;
@@ -206,7 +266,7 @@ int main()
         int w, h;
         SDL_GetWindowSize(SDLContext::get().window(), &w, &h);
 
-        if(w != last_width && h != last_height) {
+        if(w != last_width || h != last_height) {
             last_width = w;
             last_height = h;
 
@@ -229,11 +289,15 @@ int main()
             game_of_life_board.resize(w / SCALE_FACTOR, h / SCALE_FACTOR);
             final.resize(w / SCALE_FACTOR, h / SCALE_FACTOR);
 
-            pattern_data.circles.resize(5, PatternData::Circle{
-                    {game_of_life_board.width / 2, game_of_life_board.height / 2},
-                    {game_of_life_board.width / 2, game_of_life_board.height / 2},
-                    {game_of_life_board.width / 2, game_of_life_board.height / 2}
-            });
+            pattern_data.circles.resize(5);
+
+            for(auto& c: pattern_data.circles) {
+                c = PatternData::Circle{
+                        {game_of_life_board.width / 2, game_of_life_board.height / 2},
+                        {game_of_life_board.width / 2, game_of_life_board.height / 2},
+                        {game_of_life_board.width / 2, game_of_life_board.height / 2}
+                };
+            }
 
             pattern_data.circle_radius = std::max(std::max(game_of_life_board.width, game_of_life_board.height) / 28, 1);
         }
@@ -266,12 +330,12 @@ int main()
     };
 
     #ifdef __EMSCRIPTEN__
-        emscripten_set_main_loop(main_loop, 0, 1);
+        emscripten_set_main_loop(main_loop, 20, 1);
     #else
         while(!SDLContext::get().should_close())
         {
             main_loop();
-            SDL_Delay(20);
+            SDL_Delay(30);
         }
     #endif
 
